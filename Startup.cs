@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,35 +30,27 @@ namespace AngularCSignInAPI
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
-        {
-            options.TokenValidationParameters = new TokenValidationParameters
+            services.AddSwaggerGen(c =>
             {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = "your-issuer",
-                ValidAudience = "your-audience",
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("your-secret-key"))
-            };
-        });
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "AngularCSignInAPI", Version = "v1" });
+            });
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+            services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IDbContext, AppDbContext>();
+            services.Configure<JwtSettings>(Configuration.GetSection("JwtSettings"));
 
             services.AddCors(options =>
             {
                 options.AddDefaultPolicy(builder =>
                 {
-                    builder.WithOrigins("http://localhost:4200")
+                    builder.WithOrigins("https://gama104.azurewebsites.net")
                            .AllowAnyHeader()
                            .AllowAnyMethod();
                 });
             });
 
             services.AddControllers();
-            services.AddSwaggerGen(c =>
-            {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "AngularCSignInAPI", Version = "v1" });
-            });
 
         }
 
@@ -65,15 +58,16 @@ namespace AngularCSignInAPI
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             app.UseCors();
-            app.UseSwagger();
-            app.UseSwaggerUI(c =>
-            {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Your API Name v1");
-            });
+            ConfigureSwagger(app);
+            //app.UseSwagger();
+            //app.UseSwaggerUI(c =>
+            //{
+            //    c.SwaggerEndpoint("/swagger/v1/swagger.json", "AngularCSignInAPI v1");
+            //});
 
+            app.UseDeveloperExceptionPage();
             if (env.IsDevelopment())
             {
-                app.UseDeveloperExceptionPage();
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AngularCSignInAPI v1"));
             }
@@ -87,6 +81,16 @@ namespace AngularCSignInAPI
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
+            });
+        }
+
+        private void ConfigureSwagger(IApplicationBuilder app)
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "AngularCSignInAPI v1");
+                c.RoutePrefix = string.Empty;
             });
         }
     }

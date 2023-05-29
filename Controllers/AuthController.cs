@@ -7,33 +7,66 @@ using System.Security.Claims;
 using System.Text;
 using System;
 using Microsoft.Graph;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Graph.Models.ExternalConnectors;
+using Microsoft.Graph.Models;
+
 
 [ApiController]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
+    private readonly IUserRepository _userRepository;
 
-    public AuthController(IConfiguration configuration)
+    public AuthController(IConfiguration configuration, IUserRepository userRepository)
     {
         _configuration = configuration;
+        _userRepository = userRepository;
     }
 
     [HttpPost("signin")]
     public IActionResult SignIn([FromBody] SignInRequest request)
     {
-        // Validate the user's credentials against your data store
-        if (IsValidCredentials(request.Username, request.Password))
-        {
-            // Generate JWT token
-            var token = GenerateJwtToken(request.Username);
+        var user = _userRepository.GetUser(request.Username, request.Password);
 
-            // Return the token as the response
+        if (user != null)
+        {
+            // User found, generate and return a token
+            var token = GenerateJwtToken(user.Username);
             return Ok(new { Token = token });
         }
 
-        // Return appropriate response for invalid credentials
+        // User not found, return unauthorized status
         return Unauthorized();
+    }
+
+    [HttpPost("register")]
+    public IActionResult Register([FromBody] RegisterRequest request)
+    {
+        // Create a new user entity
+        var user = new User
+        {
+            Username = request.Username,
+            Password = request.Password
+        };
+        try
+        {
+            // Add the user to the Users DbSet
+            _userRepository.AddUser(user);
+
+            // Save the changes to the database
+            _userRepository.SaveChanges();
+
+            // Return a success response
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            // Handle any exceptions that occur during the database operation
+            return StatusCode(500, "An error occurred while registering the user.");
+        }
     }
 
     private bool IsValidCredentials(string username, string password)
@@ -56,7 +89,7 @@ public class AuthController : ControllerBase
 
         // Generate token using the claims and your secret key
         var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]);
+        var key = Encoding.UTF8.GetBytes(_configuration["JwtSettings:SecretKey"]);
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
